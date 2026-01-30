@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "worktree-env"
+version = "0.1.0"
+description = "Isolated ports, database names, and env vars for each Git worktree"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.0",
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+worktree-env = "worktree_env.cli:main"
