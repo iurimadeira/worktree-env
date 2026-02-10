@@ -1,7 +1,7 @@
 import click
 
 from .config import load_global_config, load_project_config
-from .envrc import run_direnv_allow, write_envrc
+from .envrc import ensure_direnv, run_direnv_allow, write_envrc
 from .errors import WorktreeEnvError
 from .ports import allocate_ports
 from .registry import (
@@ -82,7 +82,8 @@ def init():
 
         envrc_path = write_envrc(repo_root, env_vars, ports)
 
-        direnv_ok = run_direnv_allow(repo_root)
+        ensure_direnv()
+        run_direnv_allow(repo_root)
 
         click.echo(f"Project:  {project_config.name}")
         click.echo(f"Worktree: {worktree_name}")
@@ -95,11 +96,6 @@ def init():
             click.echo("Env:")
             for name, value in sorted(env_vars.items()):
                 click.echo(f"  {name}={value}")
-        if not direnv_ok:
-            click.echo(
-                "Warning: direnv not found or failed. "
-                "Source .envrc manually if needed."
-            )
 
     except WorktreeEnvError as e:
         raise click.ClickException(str(e))
