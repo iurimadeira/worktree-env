@@ -1,4 +1,80 @@
-from worktree_env.envrc import write_envrc
+from unittest.mock import patch
+
+import pytest
+
+from worktree_env.envrc import (
+    _detect_shell,
+    _ensure_shell_hook,
+    ensure_direnv,
+    write_envrc,
+)
+from worktree_env.errors import WorktreeEnvError
+
+
+class TestDetectShell:
+    def test_detects_zsh(self, monkeypatch):
+        monkeypatch.setenv("SHELL", "/bin/zsh")
+        assert _detect_shell() == "zsh"
+
+    def test_detects_bash(self, monkeypatch):
+        monkeypatch.setenv("SHELL", "/bin/bash")
+        assert _detect_shell() == "bash"
+
+    def test_returns_none_for_unknown_shell(self, monkeypatch):
+        monkeypatch.setenv("SHELL", "/bin/tcsh")
+        assert _detect_shell() is None
+
+    def test_returns_none_when_shell_unset(self, monkeypatch):
+        monkeypatch.delenv("SHELL", raising=False)
+        assert _detect_shell() is None
+
+
+class TestEnsureShellHook:
+    def test_adds_hook_to_new_rc_file(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+        assert _ensure_shell_hook("zsh") is True
+        rc = (tmp_path / ".zshrc").read_text()
+        assert 'eval "$(direnv hook zsh)"' in rc
+        assert "# Added by worktree-env" in rc
+
+    def test_skips_when_hook_already_present(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+        (tmp_path / ".zshrc").write_text('eval "$(direnv hook zsh)"\n')
+        assert _ensure_shell_hook("zsh") is False
+
+    def test_appends_without_clobbering(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+        (tmp_path / ".zshrc").write_text("export FOO=bar\n")
+        _ensure_shell_hook("zsh")
+        rc = (tmp_path / ".zshrc").read_text()
+        assert "export FOO=bar" in rc
+        assert 'eval "$(direnv hook zsh)"' in rc
+
+
+class TestEnsureDirenv:
+    def test_succeeds_when_installed_and_hook_present(self, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda _: "/usr/local/bin/direnv")
+        with patch(
+            "worktree_env.envrc._detect_shell", return_value="zsh"
+        ), patch(
+            "worktree_env.envrc._ensure_shell_hook", return_value=False
+        ):
+            ensure_direnv()
+
+    def test_raises_when_direnv_not_installed(self, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda _: None)
+        with pytest.raises(WorktreeEnvError, match="direnv is required"):
+            ensure_direnv()
+
+    def test_calls_ensure_shell_hook_when_missing(self, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda _: "/usr/local/bin/direnv")
+        with patch(
+            "worktree_env.envrc._detect_shell", return_value="zsh"
+        ), patch(
+            "worktree_env.envrc._ensure_shell_hook", return_value=True
+        ) as mock_hook:
+            ensure_direnv()
+            mock_hook.assert_called_once_with("zsh")
 
 
 class TestWriteEnvrc:

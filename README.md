@@ -7,7 +7,7 @@ When working with multiple Git worktrees of the same repository, you often run i
 ## Installation
 
 ```bash
-pip install worktree-env
+pip install git+https://github.com/iurimadeira/worktree-env.git
 ```
 
 Requires Python 3.10+.

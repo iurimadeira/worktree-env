@@ -1,6 +1,62 @@
+import os
 import shutil
 import subprocess
 from pathlib import Path
+
+import click
+
+from .errors import WorktreeEnvError
+
+SHELL_HOOKS = {
+    "zsh": {"rc": ".zshrc", "hook": 'eval "$(direnv hook zsh)"'},
+    "bash": {"rc": ".bashrc", "hook": 'eval "$(direnv hook bash)"'},
+    "fish": {"rc": ".config/fish/config.fish", "hook": "direnv hook fish | source"},
+}
+
+
+def _detect_shell() -> str | None:
+    """Detect user's shell from $SHELL env var."""
+    shell_path = os.environ.get("SHELL", "")
+    name = Path(shell_path).name if shell_path else ""
+    return name if name in SHELL_HOOKS else None
+
+
+def _ensure_shell_hook(shell_name: str) -> bool:
+    """Add direnv hook to shell rc file if not already present. Returns True if added."""
+    config = SHELL_HOOKS[shell_name]
+    rc_path = Path.home() / config["rc"]
+    if rc_path.exists() and "direnv hook" in rc_path.read_text():
+        return False
+    rc_path.parent.mkdir(parents=True, exist_ok=True)
+    with rc_path.open("a") as f:
+        f.write(f"\n# Added by worktree-env\n{config['hook']}\n")
+    return True
+
+
+def ensure_direnv() -> None:
+    """Ensure direnv is installed and shell hook is configured.
+
+    Raises WorktreeEnvError if direnv is not installed.
+    Auto-adds shell hook if direnv is installed but hook is missing.
+    """
+    if not shutil.which("direnv"):
+        raise WorktreeEnvError(
+            "direnv is required but not installed. Install it first:\n"
+            "  brew install direnv"
+        )
+
+    shell_name = _detect_shell()
+    if shell_name:
+        if _ensure_shell_hook(shell_name):
+            rc_file = SHELL_HOOKS[shell_name]["rc"]
+            click.echo(f"Added direnv hook to ~/{rc_file}")
+            click.echo(f"Restart your shell or run: source ~/{rc_file}")
+    else:
+        shell_path = os.environ.get("SHELL", "unknown")
+        click.echo(
+            f"Warning: unsupported shell ({shell_path}). "
+            "Add the direnv hook manually: https://direnv.net/docs/hook.html"
+        )
 
 
 def write_envrc(
